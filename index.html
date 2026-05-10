@@ -477,6 +477,39 @@ body{
 }
 .risk-toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
 
+/* ── MODAL INPUT ── */
+#secret-input{
+  width:100%;
+  padding:11px 14px;
+  border:1.5px solid #f0d8dc;
+  border-radius:12px;
+  font-family:'Outfit',sans-serif;
+  font-size:14px;
+  color:#1e1015;
+  outline:none;
+  transition:border-color 0.2s;
+  background:#fffaf8;
+}
+#secret-input:focus{border-color:var(--rose)}
+.input-error{
+  font-size:12px;
+  color:#e8637a;
+  margin-top:8px;
+  text-align:center;
+  animation:shake 0.4s ease;
+}
+@keyframes shake{
+  0%,100%{transform:translateX(0)}
+  20%{transform:translateX(-6px)}
+  40%{transform:translateX(6px)}
+  60%{transform:translateX(-4px)}
+  80%{transform:translateX(4px)}
+}
+
+  50%{box-shadow:0 4px 28px rgba(232,99,122,0.75)}
+}
+.sound-btn.playing{animation:spin 0.8s linear infinite}
+
 /* ── HIDDEN ── */
 .hidden{display:none!important}
 
@@ -705,12 +738,36 @@ body{
 <!-- CONFIRM MODAL -->
 <div class="modal-backdrop hidden" id="sweet-modal">
   <div class="modal-box">
-    <span class="m-icon">🌸</span>
-    <h3>Are you sure?</h3>
-    <p>You are about to leave the comfort of Roast Mode and enter the soft, emotional, feelings zone. Proceed with caution. 😬</p>
-    <div class="modal-btns">
-      <button class="m-cancel" onclick="closeModal()">No, stay safe</button>
-      <button class="m-ok" onclick="confirmSweet()">OK, show me 💕</button>
+    <!-- STEP 1: Are you sure -->
+    <div id="modal-step1">
+      <span class="m-icon">🌸</span>
+      <h3>Are you sure?</h3>
+      <p>Sweet Lines are locked behind a secret. Only the right answer will open them... 🔐</p>
+      <div class="modal-btns">
+        <button class="m-cancel" onclick="closeModal()">No, go back</button>
+        <button class="m-ok" onclick="showStep2()">Yes, try it 💕</button>
+      </div>
+    </div>
+    <!-- STEP 2: Secret question -->
+    <div id="modal-step2" class="hidden">
+      <span class="m-icon">🤔</span>
+      <h3>Secret Question</h3>
+      <p style="margin-bottom:14px;">What does your bhai call you to insult you? <br><span style="font-size:11px;color:#ce93d8;">(type the answer below)</span></p>
+      <input type="text" id="secret-input" placeholder="Type here..." oninput="clearError()" />
+      <p class="input-error hidden" id="input-error">❌ Wrong answer! Sweet Lines rejected. 😂</p>
+      <div class="modal-btns" style="margin-top:14px;">
+        <button class="m-cancel" onclick="closeModal()">Cancel</button>
+        <button class="m-ok" onclick="checkAnswer()">Unlock 🔓</button>
+      </div>
+    </div>
+    <!-- STEP 3: Rejected -->
+    <div id="modal-step3" class="hidden">
+      <span class="m-icon">🚫</span>
+      <h3>ACCESS DENIED</h3>
+      <p>Wrong answer, Moti! Sweet Lines are not for you today. Go back to roast mode where you belong. 😂🔥</p>
+      <div class="modal-btns">
+        <button class="m-ok" style="flex:1" onclick="closeModal()">Fine... 😤</button>
+      </div>
     </div>
   </div>
 </div>
@@ -807,21 +864,110 @@ function sendLove(){
   setTimeout(()=>{b.innerHTML='';b.classList.remove('show')},3200);
 }
 
-/* ── TAB SWITCH ── */
+    isSpeaking=false;
+    btn.classList.remove('playing');
+    btn.textContent='🔊';
+    return;
+  }
+
+  isSpeaking=true;
+  btn.classList.add('playing');
+  btn.textContent='🎵';
+
+  /* sweet background music using Web Audio */
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const notes = [523,587,659,587,523,659,587,523];
+  notes.forEach((freq,i)=>{
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.type='sine';
+    osc.frequency.value=freq;
+    const t = audioCtx.currentTime + i*0.38;
+    gain.gain.setValueAtTime(0,t);
+    gain.gain.linearRampToValueAtTime(0.18,t+0.05);
+    gain.gain.linearRampToValueAtTime(0,t+0.32);
+    osc.start(t); osc.stop(t+0.35);
+  });
+
+  /* speech — boy voice, sweet pitch */
+  const phrases = [
+    'Didi Didi',
+    'Ye Didi',
+    'Didi Ye',
+    'Didi'
+  ];
+  const fullText = 'Didi Didi ye... Didi Didi ye... Didi...';
+  const utter = new SpeechSynthesisUtterance(fullText);
+  
+  /* pick a male voice if available */
+  const voices = window.speechSynthesis.getVoices();
+  const maleHi = voices.find(v=> v.lang==='hi-IN' && /male|man|boy/i.test(v.name));
+  const hiVoice = voices.find(v=> v.lang==='hi-IN');
+  const maleEn = voices.find(v=> /male|man/i.test(v.name) && v.lang.startsWith('en'));
+  if(maleHi) utter.voice = maleHi;
+  else if(hiVoice) utter.voice = hiVoice;
+  else if(maleEn) utter.voice = maleEn;
+
+  utter.lang = 'hi-IN';
+  utter.rate = 0.78;
+  utter.pitch = 0.85;   /* lower = more boyish */
+  utter.volume = 1;
+
+  utter.onend = ()=>{
+    isSpeaking=false;
+    btn.classList.remove('playing');
+    btn.textContent='🔊';
+    if(audioCtx){ audioCtx.close(); audioCtx=null; }
+  };
+
+  window.speechSynthesis.cancel();
+  /* voices may not load instantly on first call */
+  if(window.speechSynthesis.getVoices().length===0){
+    window.speechSynthesis.onvoiceschanged = ()=>{ window.speechSynthesis.speak(utter); };
+  } else {
+    window.speechSynthesis.speak(utter);
+  }
+}
+
+/* ── MODAL STEPS ── */
 function askSweetConfirm(){
+  showStep(1);
   document.getElementById('sweet-modal').classList.remove('hidden');
+}
+function showStep(n){
+  document.getElementById('modal-step1').classList.add('hidden');
+  document.getElementById('modal-step2').classList.add('hidden');
+  document.getElementById('modal-step3').classList.add('hidden');
+  document.getElementById('modal-step'+n).classList.remove('hidden');
+}
+function showStep2(){
+  showStep(2);
+  document.getElementById('secret-input').value='';
+  document.getElementById('input-error').classList.add('hidden');
+  setTimeout(()=>document.getElementById('secret-input').focus(),100);
+}
+function clearError(){
+  document.getElementById('input-error').classList.add('hidden');
+}
+function checkAnswer(){
+  const val = document.getElementById('secret-input').value.trim().toLowerCase();
+  const accepted = ['chudail','dayan','atankwadi'];
+  if(accepted.includes(val)){
+    closeModal();
+    const toast=document.getElementById('risk-toast');
+    toast.classList.add('show');
+    setTimeout(()=>{
+      toast.classList.remove('show');
+      setTimeout(()=>switchTab('love'),350);
+    },1600);
+  } else {
+    showStep(3);
+  }
 }
 function closeModal(){
   document.getElementById('sweet-modal').classList.add('hidden');
-}
-function confirmSweet(){
-  closeModal();
-  const toast=document.getElementById('risk-toast');
-  toast.classList.add('show');
-  setTimeout(()=>{
-    toast.classList.remove('show');
-    setTimeout(()=>switchTab('love'),350);
-  },1600);
+  showStep(1);
 }
 function switchTab(tab){
   const ls=document.getElementById('love-section');
@@ -837,9 +983,12 @@ function switchTab(tab){
     bl.onclick=askSweetConfirm;
   }
 }
-// close modal on backdrop click
 document.getElementById('sweet-modal').addEventListener('click',function(e){
   if(e.target===this) closeModal();
+});
+// allow Enter key in input
+document.getElementById('secret-input').addEventListener('keydown',function(e){
+  if(e.key==='Enter') checkAnswer();
 });
 
 /* ── IMAGE PREVIEW ── */
